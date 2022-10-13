@@ -15,4 +15,4 @@
 const static int DIGITAL_INPUT_PINS[] = {23,22,19,18,5,4,21,15}; // msb to lsb
 #define DIGITAL_INPUT_PIN_COUNT 8
 
-#define MAX_CONN
+#define MAX_CONN 10

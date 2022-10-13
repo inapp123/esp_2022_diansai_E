@@ -41,9 +41,13 @@ void app_main(void)
         // ESP_LOGI(TAG,"hello world! digital input is: %d", get_digital_input());
         ssd1306_clear_line(&dev, 1,false);
 
-        char* formated_str = format_digital_input(get_digital_input());
+        uint32_t digitalinputs = get_digital_input();
+        char* formated_str = format_digital_input(digitalinputs);
         ssd1306_display_text(&dev, 1, formated_str, strlen(formated_str), false);
 
+        uint8_t data[4];
+        *(uint32_t*)data = digitalinputs;
+        wsclient_boardcast(data,4);
         vTaskDelay(pdMS_TO_TICKS(200));
 
     }

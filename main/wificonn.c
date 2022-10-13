@@ -13,6 +13,40 @@
 
 const static char *TAG = "wificonn";
 
+wsclient_list_t wsclient_list = {};
+
+void wsclient_list_add(httpd_req_t *req){
+    if(wsclient_list.count < MAX_CONN){
+        wsclient_list.req[wsclient_list.count++] = req;
+    }
+    else{
+        ESP_LOGE(TAG, "too many connections");
+    }
+}
+
+void wsclient_list_remove(httpd_req_t *req){
+    for(int i = 0; i < wsclient_list.count; i++){
+        if(wsclient_list.req[i] == req){
+            wsclient_list.req[i] = wsclient_list.req[--wsclient_list.count];
+            return;
+        }
+    }
+    ESP_LOGE(TAG, "connection not found?!");
+}
+
+void wsclient_boardcast(uint8_t* data, size_t len){
+    httpd_ws_frame_t ws_pkt;
+    uint8_t *buf = NULL;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_BINARY;
+    ws_pkt.payload = (uint8_t *)data;
+    ws_pkt.len = len;
+
+    for(int i = 0; i < wsclient_list.count; i++){
+        ESP_LOGI(TAG,"req:0x%p",wsclient_list.req[i]);
+        ESP_ERROR_CHECK(httpd_ws_send_frame(wsclient_list.req[i], &ws_pkt));
+    }
+}
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
@@ -50,6 +84,8 @@ esp_err_t ws_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "ws_handler: method - %d", req->method);
     if (req->method == HTTP_GET) {
         ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        ESP_LOGI(TAG,"req:0x%p",req);
+        wsclient_list_add(req);
         return ESP_OK;
     }
     httpd_ws_frame_t ws_pkt;
@@ -83,13 +119,16 @@ esp_err_t ws_handler(httpd_req_t *req)
     ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
 
     if(ws_pkt.type == HTTPD_WS_TYPE_CLOSE){
-        
+        ESP_LOGI(TAG, "Connection closed");
+        wsclient_list_remove(req);
     }
-
-    ret = httpd_ws_send_frame(req, &ws_pkt);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+    else{
+        ret = httpd_ws_send_frame(req, &ws_pkt);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+        }
     }
+    
     free(buf);
     return ret;
 }
