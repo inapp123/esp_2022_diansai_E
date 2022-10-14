@@ -14,37 +14,53 @@
 const static char *TAG = "wificonn";
 
 wsclient_list_t wsclient_list = {};
+httpd_handle_t server = NULL;
 
-void wsclient_list_add(httpd_req_t *req){
+
+void wsclient_list_add(int fd){
     if(wsclient_list.count < MAX_CONN){
-        wsclient_list.req[wsclient_list.count++] = req;
+        wsclient_list.fd[wsclient_list.count++] = fd;
     }
     else{
         ESP_LOGE(TAG, "too many connections");
     }
 }
 
-void wsclient_list_remove(httpd_req_t *req){
+void wsclient_list_remove(int fd){
     for(int i = 0; i < wsclient_list.count; i++){
-        if(wsclient_list.req[i] == req){
-            wsclient_list.req[i] = wsclient_list.req[--wsclient_list.count];
+        if(wsclient_list.fd[i] == fd){
+            wsclient_list.fd[i] = wsclient_list.fd[--wsclient_list.count];
             return;
         }
     }
     ESP_LOGE(TAG, "connection not found?!");
 }
 
-void wsclient_boardcast(uint8_t* data, size_t len){
+void ws_async_send(void *arg)
+{
+    ws_async_t *resp_arg = arg;
+    httpd_handle_t hd = resp_arg->hd;
+    int fd = resp_arg->fd;
     httpd_ws_frame_t ws_pkt;
-    uint8_t *buf = NULL;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.type = HTTPD_WS_TYPE_BINARY;
-    ws_pkt.payload = (uint8_t *)data;
-    ws_pkt.len = len;
+    ws_pkt.payload = resp_arg->data;
+    ws_pkt.len = resp_arg->len;
+    ws_pkt.type = resp_arg->type;
 
+    ESP_ERROR_CHECK(httpd_ws_send_frame_async(hd, fd, &ws_pkt));
+    free(resp_arg);
+}
+
+void wsclient_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type){
     for(int i = 0; i < wsclient_list.count; i++){
-        ESP_LOGI(TAG,"req:0x%p",wsclient_list.req[i]);
-        ESP_ERROR_CHECK(httpd_ws_send_frame(wsclient_list.req[i], &ws_pkt));
+        int fd = wsclient_list.fd[i];
+        ws_async_t *resp_arg = malloc(sizeof(ws_async_t));
+        resp_arg->hd = server;
+        resp_arg->fd = fd;
+        resp_arg->data = data;
+        resp_arg->len = len;
+        resp_arg->type = type;
+        ESP_ERROR_CHECK(httpd_queue_work(server, ws_async_send, resp_arg));
     }
 }
 
@@ -62,11 +78,14 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
+
+extern const char index_html_start[] asm("_binary_index_html_start");
+extern const char index_html_end[]   asm("_binary_index_html_end");
+
 esp_err_t index_handler(httpd_req_t *req)
 {
     /* Send a simple response */
-    const char resp[] = "<html><body><h1> Hello World! </h1></body></html>";
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, index_html_start, index_html_end - index_html_start);
     return ESP_OK;
 }
 
@@ -85,7 +104,7 @@ esp_err_t ws_handler(httpd_req_t *req)
     if (req->method == HTTP_GET) {
         ESP_LOGI(TAG, "Handshake done, the new connection was opened");
         ESP_LOGI(TAG,"req:0x%p",req);
-        wsclient_list_add(req);
+        wsclient_list_add(httpd_req_to_sockfd(req));
         return ESP_OK;
     }
     httpd_ws_frame_t ws_pkt;
@@ -120,7 +139,7 @@ esp_err_t ws_handler(httpd_req_t *req)
 
     if(ws_pkt.type == HTTPD_WS_TYPE_CLOSE){
         ESP_LOGI(TAG, "Connection closed");
-        wsclient_list_remove(req);
+        wsclient_list_remove(httpd_req_to_sockfd(req));
     }
     else{
         ret = httpd_ws_send_frame(req, &ws_pkt);
@@ -162,7 +181,6 @@ static const httpd_uri_t captive_uri = {
 
 httpd_handle_t start_webserver(void)
 {
-    httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     // Start the httpd server

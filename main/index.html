@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 WS monitor</title>
+</head>
+<body>
+    <script>
+        function connectws(){
+            var ws = new WebSocket("ws://192.168.4.1/ws");
+            ws.onmessage = function (evt) {
+                evt.data.arrayBuffer().then((buf) => {
+                    console.log(buf)
+                    let dv = new DataView(buf);
+                    document.getElementById("ws").innerHTML = dv.getUint8(0);
+                })
+            };
+        }
+
+    </script>
+    <h1>ESP32 WS monitor:</h1>
+    <button onclick="connectws()">连接</button>
+    <div id="ws"></div>
+    
+</body>
+</html>
