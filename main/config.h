@@ -17,5 +17,5 @@ const static int DIGITAL_INPUT_PINS[] = {23,22,19,18,5,4,21,15}; // msb to lsb
 
 #define MAX_CONN 10
 
-#define ADC_SAMPLES_COUNT 512
-#define I2S_SAMPLE_RATE 44100
+#define ADC_SAMPLES_COUNT 1024
+#define I2S_SAMPLE_RATE 19600

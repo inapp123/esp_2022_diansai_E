@@ -27,6 +27,8 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
     last_trigger_time = now_time;
 }
 
+extern wsclient_list_t wsclient_list;
+
 
 uint32_t digitalinputs;
 void screenUpdTask(void* pvParameter){
@@ -42,6 +44,9 @@ void screenUpdTask(void* pvParameter){
 #else
     ssd1306_display_text(&dev, 0, "STA Mode, TX off", 17, false);
 #endif
+
+    static char buf[32];
+    int buflen;
 
     while(1){
         ssd1306_clear_line(&dev, 0,false);
@@ -64,7 +69,12 @@ void screenUpdTask(void* pvParameter){
         char* formated_str = format_digital_input(digitalinputs);
         ssd1306_display_text(&dev, 1, formated_str, strlen(formated_str), false);
 
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+        buflen = sprintf(buf, "wsconn:%d RX:",wsclient_list.count);
+        ssd1306_clear_line(&dev, 2,false);
+        ssd1306_display_text(&dev, 2, buf, buflen, false);
+
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 }
 
@@ -103,7 +113,7 @@ void app_main(void){
         data[0] = WS_TYPE_DIGITAL;
         data[1] = digitalinputs;
         if(do_tx){
-            wsclient_boardcast(data,1,HTTPD_WS_TYPE_BINARY);
+            wsclient_boardcast(data,2,HTTPD_WS_TYPE_BINARY);
         }
         vTaskDelay(pdMS_TO_TICKS(200));
 

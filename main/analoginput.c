@@ -26,9 +26,9 @@ void init_i2s()
 	i2s_config.dma_buf_count = 5;
 
 	// install and start i2s driver
-    ESP_ERROR_CHECK(adc1_config_channel_atten(ADC_CHANNEL_0, ADC_ATTEN_11db));
+    ESP_ERROR_CHECK(adc1_config_channel_atten(ADC_CHANNEL_7, ADC_ATTEN_11db));
 	ESP_ERROR_CHECK( i2s_driver_install(I2S_NUM_0, &i2s_config,  0, NULL) );
-	ESP_ERROR_CHECK( i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_0) );
+	ESP_ERROR_CHECK( i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_7) );
 
 	//vTaskDelay(5000 / portTICK_RATE_MS);
 	//printf("Done waiting, enable ADC... \n");

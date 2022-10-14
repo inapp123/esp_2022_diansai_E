@@ -47,8 +47,12 @@ void ws_async_send(void *arg)
     ws_pkt.len = resp_arg->len;
     ws_pkt.type = resp_arg->type;
 
-    ESP_ERROR_CHECK(httpd_ws_send_frame_async(hd, fd, &ws_pkt));
+    esp_err_t ret = httpd_ws_send_frame_async(hd, fd, &ws_pkt);
     free(resp_arg);
+    if(ret != ESP_OK){
+        ESP_LOGW(TAG,"send error...removing!");
+        wsclient_list_remove(fd);
+    }
 }
 
 void wsclient_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type){
