@@ -20,16 +20,16 @@
     <v-main>
       <v-container fluid>
         <v-row>
-          <v-col cols="6">
+          <v-col cols="12" sm="12" md="6" lg="6" xl="6">
             <Digital :num="apdigitalval" label="AP数字值"></Digital>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="12" sm="12" md="6" lg="6" xl="6">
             <Digital :num="stadigitalval" label="STA数字值"></Digital>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="12" sm="12" md="6" lg="6" xl="6">
             <Analog :val="apanalogval" label="AP模拟值" ref="apanal"></Analog>
           </v-col>
-          <v-col cols="6">
+          <v-col cols="12" sm="12" md="6" lg="6" xl="6">
             <Analog :val="staanalogval" label="STA模拟值" ref="staanal"></Analog>
           </v-col>
         </v-row>
@@ -70,12 +70,30 @@ export default {
         this.staws.close();
         this.staconnected = false;
       }else{
-        this.staws = new WebSocket("ws://192.168.4.255/ws");
+        this.staws = new WebSocket("ws://192.168.4.250/ws");
         this.staws.onopen = () => {
           this.staconnected = true;
         };
         this.staws.onmessage = (e) => {
-          console.log(e.data);
+          e.data.arrayBuffer().then(buffer => {
+            var dv = new DataView(buffer);
+            let type = dv.getUint8(0);
+            if (type == 0){// digital
+              let val = dv.getUint8(1);
+              this.stadigitalval = val;
+            }
+            else if(type == 1){ // analog
+              if(this.stadigitalval.length == 0){
+                this.stadigitalval = new Array((buffer.byteLength - 1) / 2)
+              }
+              for(let i = 0; i < (buffer.byteLength - 1) / 2; i++){
+                let valreversed = dv.getUint16(1+i*2,true);
+                this.stadigitalval[i] = valreversed - 0x7000
+              }
+              console.log(this.stadigitalval)
+              this.$refs.staanal.updateVal();
+            } 
+          })
         };
         this.staws.onclose = () => {
           this.staconnected = false;
@@ -105,9 +123,10 @@ export default {
                 this.apanalogval = new Array((buffer.byteLength - 1) / 2)
               }
               for(let i = 0; i < (buffer.byteLength - 1) / 2; i++){
-                this.apanalogval[i] = dv.getUint16(1+i*2,false);
+                let valreversed = dv.getUint16(1+i*2,true);
+                this.apanalogval[i] = valreversed - 0x7000
               }
-              console.log(dv.getUint16(1,false))
+              console.log(this.apanalogval)
               this.$refs.apanal.updateVal();
             } 
           })

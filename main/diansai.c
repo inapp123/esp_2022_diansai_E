@@ -7,10 +7,9 @@
 #include "wificonn.h"
 #include "string.h"
 
-
 #include "digitalinput.h"
 #include "analoginput.h"
-
+#include "remotedigital.h"
 
 const static char *TAG = "main";
 
@@ -29,7 +28,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg){
 
 extern wsclient_list_t wsclient_list;
 
-
+extern int remote_connected;
 uint32_t digitalinputs;
 void screenUpdTask(void* pvParameter){
     i2c_master_init(&dev, I2C_SDA, I2C_SCL, -1);
@@ -65,16 +64,18 @@ void screenUpdTask(void* pvParameter){
 #endif
         }
         ssd1306_clear_line(&dev, 1,false);
-
         char* formated_str = format_digital_input(digitalinputs);
         ssd1306_display_text(&dev, 1, formated_str, strlen(formated_str), false);
 
-        buflen = sprintf(buf, "wsconn:%d RX:",wsclient_list.count);
+        buflen = sprintf(buf, "ws:%d rdi:%s",wsclient_list.count,remote_connected ? "OK!" : "NG!");
         ssd1306_clear_line(&dev, 2,false);
         ssd1306_display_text(&dev, 2, buf, buflen, false);
 
+        ssd1306_clear_line(&dev, 3,false);
+        formated_str = format_digital_input(remote_digital);
+        ssd1306_display_text(&dev, 3, formated_str, strlen(formated_str), false);
 
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(300 / portTICK_PERIOD_MS);
     }
 }
 
@@ -99,15 +100,16 @@ void app_main(void){
 
     init_digital_input();
     init_wifi();
+    init_remote_digital();
+
 
     xTaskCreate(&screenUpdTask, "screenUpdTask", 2048, NULL, 2, NULL);
-    xTaskCreate(&analoginputTask, "analoginputTask", 2048, NULL, 2, NULL);
+    xTaskCreate(&analoginputTask, "analoginputTask", 4096, NULL, 2, NULL);
 
     while(1){
         // ESP_LOGI(TAG,"hello world! digital input is: %d", get_digital_input());
 
         digitalinputs = get_digital_input();
-        
 
         uint8_t data[2];
         data[0] = WS_TYPE_DIGITAL;
@@ -115,7 +117,8 @@ void app_main(void){
         if(do_tx){
             wsclient_boardcast(data,2,HTTPD_WS_TYPE_BINARY);
         }
-        vTaskDelay(pdMS_TO_TICKS(200));
+        wsclient_digital_boardcast(data,2,HTTPD_WS_TYPE_BINARY);
+        vTaskDelay(pdMS_TO_TICKS(100));
 
     }
 }

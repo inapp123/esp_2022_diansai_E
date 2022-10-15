@@ -30,3 +30,7 @@ extern wsclient_list_t wsclient_list;
 
 void init_wifi(void);
 void wsclient_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type);
+void wsclient_digital_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type);
+
+httpd_handle_t start_webserver(void);
+void stop_webserver(void);

@@ -19,10 +19,13 @@
     "vuetify": "^2.6.0"
   },
   "devDependencies": {
+    "@babel/core": "^7.19.3",
+    "@babel/plugin-proposal-optional-chaining": "^7.18.9",
     "@vue/cli-plugin-babel": "~4.5.17",
     "@vue/cli-plugin-eslint": "~4.5.17",
     "@vue/cli-service": "~4.5.17",
     "babel-eslint": "^10.1.0",
+    "babel-loader": "^8.2.5",
     "eslint": "^6.7.2",
     "eslint-plugin-vue": "^6.2.2",
     "html-webpack-inline-source-plugin": "^1.0.0-beta.2",
@@ -30,6 +33,7 @@
     "sass": "~1.32.0",
     "sass-loader": "^10.0.0",
     "vue-cli-plugin-vuetify": "^2.5.8",
+    "vue-template-babel-compiler": "^2.0.0",
     "vue-template-compiler": "^2.6.11",
     "vuetify-loader": "^1.7.0"
   },

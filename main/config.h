@@ -6,7 +6,7 @@
 #define CONFIG_OFFSETX 0
 
 // work as ap, if not defined, work as station
-#define WORK_AS_AP 1
+// #define WORK_AS_AP 1
 
 #define WIFI_SSID      "SRGNTMG"
 #define WIFI_PWD       "SRGNTMGDIANSAI"
@@ -17,5 +17,5 @@ const static int DIGITAL_INPUT_PINS[] = {23,22,19,18,5,4,21,15}; // msb to lsb
 
 #define MAX_CONN 10
 
-#define ADC_SAMPLES_COUNT 1024
-#define I2S_SAMPLE_RATE 19600
+#define ADC_SAMPLES_COUNT 512
+#define I2S_SAMPLE_RATE 44100

@@ -13,10 +13,9 @@
 
 const static char *TAG = "wificonn";
 
-wsclient_list_t wsclient_list = {};
 httpd_handle_t server = NULL;
 
-
+wsclient_list_t wsclient_list = {};
 void wsclient_list_add(int fd){
     if(wsclient_list.count < MAX_CONN){
         wsclient_list.fd[wsclient_list.count++] = fd;
@@ -56,6 +55,9 @@ void ws_async_send(void *arg)
 }
 
 void wsclient_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type){
+    if(server == NULL){
+        return;
+    }
     for(int i = 0; i < wsclient_list.count; i++){
         int fd = wsclient_list.fd[i];
         ws_async_t *resp_arg = malloc(sizeof(ws_async_t));
@@ -68,9 +70,66 @@ void wsclient_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type){
     }
 }
 
+
+wsclient_list_t wsclient_digital_list = {};
+void wsclient_digital_list_add(int fd){
+    if(wsclient_digital_list.count < MAX_CONN){
+        wsclient_digital_list.fd[wsclient_digital_list.count++] = fd;
+    }
+    else{
+        ESP_LOGE(TAG, "too many connections");
+    }
+}
+
+void wsclient_digital_list_remove(int fd){
+    for(int i = 0; i < wsclient_digital_list.count; i++){
+        if(wsclient_digital_list.fd[i] == fd){
+            wsclient_digital_list.fd[i] = wsclient_digital_list.fd[--wsclient_digital_list.count];
+            return;
+        }
+    }
+    ESP_LOGE(TAG, "connection not found?!");
+}
+
+void ws_digital_async_send(void *arg)
+{
+    ws_async_t *resp_arg = arg;
+    httpd_handle_t hd = resp_arg->hd;
+    int fd = resp_arg->fd;
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = resp_arg->data;
+    ws_pkt.len = resp_arg->len;
+    ws_pkt.type = resp_arg->type;
+
+    esp_err_t ret = httpd_ws_send_frame_async(hd, fd, &ws_pkt);
+    free(resp_arg);
+    if(ret != ESP_OK){
+        ESP_LOGW(TAG,"send error...removing!");
+        wsclient_digital_list_remove(fd);
+    }
+}
+
+void wsclient_digital_boardcast(uint8_t* data, size_t len,httpd_ws_type_t type){
+    if(server == NULL){
+        return;
+    }
+    for(int i = 0; i < wsclient_digital_list.count; i++){
+        int fd = wsclient_digital_list.fd[i];
+        ws_async_t *resp_arg = malloc(sizeof(ws_async_t));
+        resp_arg->hd = server;
+        resp_arg->fd = fd;
+        resp_arg->data = data;
+        resp_arg->len = len;
+        resp_arg->type = type;
+        ESP_ERROR_CHECK(httpd_queue_work(server, ws_digital_async_send, resp_arg));
+    }
+}
+
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
+#ifdef WORK_AS_AP
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
@@ -80,6 +139,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
     }
+#else
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        esp_wifi_connect();
+    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        esp_wifi_connect();
+        stop_webserver();
+        ESP_LOGI(TAG, "retry to connect to the AP");
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        start_webserver();
+    }
+#endif
 }
 
 
@@ -145,8 +217,68 @@ esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGI(TAG, "Connection closed");
         wsclient_list_remove(httpd_req_to_sockfd(req));
     }
-    else{
-        ret = httpd_ws_send_frame(req, &ws_pkt);
+    else if (ws_pkt.type == HTTPD_WS_TYPE_PING){
+        httpd_ws_frame_t pongwsf;
+        memset(&pongwsf, 0, sizeof(httpd_ws_frame_t));
+        pongwsf.type = HTTPD_WS_TYPE_PONG;
+        ret = httpd_ws_send_frame(req, &pongwsf);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
+        }
+    }
+    
+    free(buf);
+    return ret;
+}
+
+esp_err_t ws_digital_handler(httpd_req_t *req)
+{
+    ESP_LOGI(TAG, "ws_digital_handler: method - %d", req->method);
+    if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        ESP_LOGI(TAG,"req:0x%p",req);
+        wsclient_digital_list_add(httpd_req_to_sockfd(req));
+        return ESP_OK;
+    }
+    httpd_ws_frame_t ws_pkt;
+    uint8_t *buf = NULL;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    /* Set max_len = 0 to get the frame len */
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
+        return ret;
+    }
+    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
+    if (ws_pkt.len) {
+        /* ws_pkt.len + 1 is for NULL termination as we are expecting a string */
+        buf = calloc(1, ws_pkt.len + 1);
+        if (buf == NULL) {
+            ESP_LOGE(TAG, "Failed to calloc memory for buf");
+            return ESP_ERR_NO_MEM;
+        }
+        ws_pkt.payload = buf;
+        /* Set max_len = ws_pkt.len to get the frame payload */
+        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
+            free(buf);
+            return ret;
+        }
+        ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
+    }
+    ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
+
+    if(ws_pkt.type == HTTPD_WS_TYPE_CLOSE){
+        ESP_LOGI(TAG, "Connection closed");
+        wsclient_digital_list_remove(httpd_req_to_sockfd(req));
+    }
+    else if (ws_pkt.type == HTTPD_WS_TYPE_PING){
+        httpd_ws_frame_t pongwsf;
+        memset(&pongwsf, 0, sizeof(httpd_ws_frame_t));
+        pongwsf.type = HTTPD_WS_TYPE_PONG;
+        ret = httpd_ws_send_frame(req, &pongwsf);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "httpd_ws_send_frame failed with %d", ret);
         }
@@ -160,6 +292,15 @@ static const httpd_uri_t ws_uri = {
         .uri        = "/ws",
         .method     = HTTP_GET,
         .handler    = ws_handler,
+        .user_ctx   = NULL,
+        .is_websocket = true,
+        .handle_ws_control_frames = true
+};
+
+static const httpd_uri_t ws_digital_uri = {
+        .uri        = "/ws_digital",
+        .method     = HTTP_GET,
+        .handler    = ws_digital_handler,
         .user_ctx   = NULL,
         .is_websocket = true,
         .handle_ws_control_frames = true
@@ -195,12 +336,24 @@ httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &index_uri);
         httpd_register_uri_handler(server, &captive_uri);
         httpd_register_uri_handler(server, &ws_uri);
+        httpd_register_uri_handler(server, &ws_digital_uri);
+
 
         return server;
     }
-
+    wsclient_list.count = 0;
     ESP_LOGI(TAG, "Error starting server!");
     return NULL;
+}
+
+void stop_webserver(void)
+{
+    if(server == NULL){
+        return;
+    }
+    wsclient_list.count = 0;
+    ESP_ERROR_CHECK(httpd_stop(server));
+    server = NULL;
 }
 
 
@@ -216,8 +369,9 @@ void init_wifi(void){
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
 
+#ifdef WORK_AS_AP
+    esp_netif_create_default_wifi_ap();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
@@ -249,9 +403,49 @@ void init_wifi(void){
     ESP_LOGI(TAG,"IP address is: %d.%d.%d.%d",IP2STR(&ip_info.ip));
     start_webserver();
 
-    captdnsInit();
 
+    captdnsInit();
     esp_netif_set_dns_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), ESP_NETIF_DNS_MAIN, &ip_info.ip);
     esp_netif_set_dns_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), ESP_NETIF_DNS_BACKUP, &ip_info.ip);
+#else
+    esp_netif_t *my_sta = esp_netif_create_default_wifi_sta();
+
+    esp_netif_dhcpc_stop(my_sta);
+
+    esp_netif_ip_info_t ip_info;
+
+    IP4_ADDR(&ip_info.ip, 192, 168, 4, 250);
+   	IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+   	IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+
+    esp_netif_set_ip_info(my_sta, &ip_info);
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
+                                                        IP_EVENT_STA_GOT_IP,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
+    wifi_config_t wifi_config = {
+        .sta = {
+            .ssid = WIFI_SSID,
+            .password = WIFI_PWD,
+            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
+    ESP_LOGI(TAG, "wifi_init_sta finished.");
+
+#endif
 
 }
