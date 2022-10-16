@@ -11,3 +11,12 @@ new Vue({
   vuetify,
   render: h => h(App)
 }).$mount('#app')
+
+window.apanalogval = [
+  [1,1,1],
+  [1,1,1]
+]
+window.staanalogval = [
+  [1,1,1],
+  [1,1,1]
+]

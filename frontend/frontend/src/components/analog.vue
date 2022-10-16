@@ -7,6 +7,11 @@
             ref="uplot"
             @create="createPlot"
         />
+        <v-divider></v-divider>
+        <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn @click="ispause = !ispause">{{ispause ? '继续' : '暂停'}}</v-btn>
+        </v-card-actions>
     </v-card>
 </template>
 
@@ -22,7 +27,7 @@ export default {
         UplotVue
     },
     props:{
-        val: Array,
+        windowKey: String,
         label: String
     },
     data() {
@@ -31,6 +36,7 @@ export default {
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             ],
+            ispause:false ,
             options: {
                 title: this.label,
                 width: 400,
@@ -74,7 +80,7 @@ export default {
                 }
             },
             target: null,
-            chart: null
+            chart: null,
         };
     },
     watch: {
@@ -84,16 +90,17 @@ export default {
     },
     methods:{
         updateVal:function(){
-            this.data[1] = this.val;
-            if(this.data[0].length != this.val.length){
-                let newlabel = []
-                for(let i = 0; i < this.val.length; i++){
-                    newlabel.push(i);
+            if(this.ispause){
+                return
+            }
+            if(window[this.windowKey][0].length != window[this.windowKey][1].length){
+                window[this.windowKey][0] = []
+                for(let i = 0; i < window[this.windowKey][1].length; i++){
+                    window[this.windowKey][0].push(i);
                 }
-                this.data[0] = newlabel;
                 console.log("updating label")
             }
-            this.chart.setData(this.data)
+            this.chart.setData(window[this.windowKey])
         },
         handleResize: function () {
             //get the parent element inner size 
@@ -117,6 +124,6 @@ export default {
 
 <style>
     .cont{
-        padding:10px
+        padding-top:10px
     }
 </style>

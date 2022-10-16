@@ -41,14 +41,17 @@ extern int do_tx;
 void analoginputTask(void* pvParameter){
     init_i2s();
     uint8_t* buf = malloc(ADC_SAMPLES_COUNT * sizeof(uint16_t) + 1);
+	int sendi = false;
     while(true){
         size_t bytes_read;
         ESP_ERROR_CHECK( i2s_read(I2S_NUM_0, buf + 1, ADC_SAMPLES_COUNT * sizeof(uint16_t), &bytes_read, portMAX_DELAY) );
         buf[0] = WS_TYPE_ANALOG;
 
-        if(do_tx){
+        if(do_tx && sendi >= 5){
             wsclient_boardcast(buf,ADC_SAMPLES_COUNT * sizeof(uint16_t) + 1, HTTPD_WS_TYPE_BINARY);
+			sendi = 0;
         }
+		sendi++;
     }
 
 }

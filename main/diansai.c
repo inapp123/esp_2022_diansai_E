@@ -114,9 +114,9 @@ void app_main(void){
         uint8_t data[2];
         data[0] = WS_TYPE_DIGITAL;
         data[1] = digitalinputs;
-        if(do_tx){
+        // if(do_tx){
             wsclient_boardcast(data,2,HTTPD_WS_TYPE_BINARY);
-        }
+        // }
         wsclient_digital_boardcast(data,2,HTTPD_WS_TYPE_BINARY);
         vTaskDelay(pdMS_TO_TICKS(100));
 
