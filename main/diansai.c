@@ -106,7 +106,7 @@ void app_main(void){
     xTaskCreate(&screenUpdTask, "screenUpdTask", 2048, NULL, 2, NULL);
     xTaskCreate(&analoginputTask, "analoginputTask", 4096, NULL, 2, NULL);
 
-    while(1){
+    while(1){   
         // ESP_LOGI(TAG,"hello world! digital input is: %d", get_digital_input());
 
         digitalinputs = get_digital_input();

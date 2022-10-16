@@ -11,6 +11,7 @@
     "@fortawesome/fontawesome-free": "5.15.3",
     "chart.js": "^3.9.1",
     "core-js": "^3.6.5",
+    "low-pass-filter": "^1.0.0",
     "roboto-fontface": "*",
     "uplot": "^1.6.22",
     "uplot-vue": "^1.1.1",

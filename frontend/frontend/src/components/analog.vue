@@ -9,7 +9,10 @@
         />
         <v-divider></v-divider>
         <v-card-actions>
+            缩放：{{zoomlevel}}
             <v-spacer></v-spacer>
+            <v-btn :disabled="!ispause || (zoomlevel > 4)" @click="zoomlevel ++">放大</v-btn>
+            <v-btn :disabled="!ispause || (zoomlevel < 1)" @click="zoomlevel --">缩小</v-btn>
             <v-btn @click="ispause = !ispause">{{ispause ? '继续' : '暂停'}}</v-btn>
         </v-card-actions>
     </v-card>
@@ -21,6 +24,8 @@
 import uPlot from 'uplot';
 import UplotVue from 'uplot-vue';
 import 'uplot/dist/uPlot.min.css';
+
+const lowPassFilter = require('low-pass-filter').lowPassFilter;
 
 export default {
     components: {
@@ -36,6 +41,8 @@ export default {
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
             ],
+            zoomkeep:[],
+            zoomlevel:0,
             ispause:false ,
             options: {
                 title: this.label,
@@ -51,7 +58,7 @@ export default {
 
                 // in-legend display
                 label: "值",
-                value: (self, rawValue) => rawValue + "(" + (rawValue / 4096 * 3.3).toFixed(2) + "V)",
+                value: (self, rawValue) => Math.floor(rawValue) + "(" + (rawValue / 4096 * 3.3).toFixed(2) + "V)",
 
                 // series style
                 stroke: "red",
@@ -62,7 +69,7 @@ export default {
                 ],
                 cursor:{
                     drag:{
-                        // x: false,
+                        x: false,
                         y: false,
                         dist: 0
                     }
@@ -86,6 +93,37 @@ export default {
     watch: {
         val: function () {
             this.updateVal()
+        },
+        zoomlevel: function(){
+            if(!this.ispause){
+                return;
+            }
+            if(this.zoomlevel == 0){
+                this.chart.setData([window[this.windowKey][0],this.zoomkeep])
+            }
+            let originalPointCount = Math.ceil(this.zoomkeep.length / (this.zoomlevel + 1));
+            let originalMid = Math.floor(this.zoomkeep.length / 2);
+            let originalPoints = this.zoomkeep.slice(originalMid - originalPointCount / 2, originalMid + originalPointCount / 2);
+            
+            //interpolate points to 512.
+            let interpolatePoints = new Array(512)
+            for(let i = 0; i < 512; i++){
+                interpolatePoints[i] = originalPoints[Math.floor(i * originalPointCount / 512)]
+            }
+            let interpolateIndex = new Array(512)
+            for(let i = 0; i < 512; i++){
+                interpolateIndex[i] = i
+            }
+
+            // butterworth low pass filter
+            lowPassFilter(interpolatePoints, 22050, 44100 * (this.zoomlevel + 1) * (this.zoomlevel + 1), 1)
+            console.log(interpolatePoints)
+            let data = [interpolateIndex, interpolatePoints]
+            this.chart.setData(data)
+        },
+        ispause: function(){
+            this.zoomlevel = 0
+            this.zoomkeep = Array.from(window[this.windowKey][1])
         }
     },
     methods:{
