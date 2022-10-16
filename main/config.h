@@ -6,7 +6,7 @@
 #define CONFIG_OFFSETX 0
 
 // work as ap, if not defined, work as station
-// #define WORK_AS_AP 1
+#define WORK_AS_AP 1
 
 #define WIFI_SSID      "SRGNTMG"
 #define WIFI_PWD       "SRGNTMGDIANSAI"
